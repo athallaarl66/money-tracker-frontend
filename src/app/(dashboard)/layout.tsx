@@ -7,8 +7,6 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import useAuthStore from "@/store/authStore";
 
-// Definisi menu navigasi
-// Dipisah jadi array supaya mudah ditambah/dikurangi
 const navItems = [
   {
     label: "Dashboard",
@@ -26,6 +24,24 @@ const navItems = [
         <rect x="14" y="3" width="7" height="7" rx="1" />
         <rect x="3" y="14" width="7" height="7" rx="1" />
         <rect x="14" y="14" width="7" height="7" rx="1" />
+      </svg>
+    ),
+  },
+  // ✅ INI YANG DITAMBAH
+  {
+    label: "Accounts",
+    href: "/accounts",
+    icon: (
+      <svg
+        width="18"
+        height="18"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        viewBox="0 0 24 24"
+      >
+        <rect x="2" y="5" width="20" height="14" rx="2" />
+        <path d="M2 10h20" />
       </svg>
     ),
   },

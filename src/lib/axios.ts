@@ -8,11 +8,21 @@ const api = axios.create({
   },
 });
 
+// Helper: ambil token dari auth-storage (tempat Zustand persist nyimpen)
+function getToken(): string | null {
+  try {
+    const raw = localStorage.getItem("auth-storage");
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed?.state?.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Request interceptor — otomatis attach JWT ke setiap request
 api.interceptors.request.use(
   (config) => {
-    // Ambil token dari localStorage
-    const token = localStorage.getItem("token");
+    const token = getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -21,13 +31,12 @@ api.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
-// Response interceptor — handle error global
-// Kalau 401 (token expired/invalid), redirect ke login
+// Response interceptor — kalau 401, berarti token expired → paksa logout
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("token");
+      localStorage.removeItem("auth-storage");
       window.location.href = "/login";
     }
     return Promise.reject(error);
