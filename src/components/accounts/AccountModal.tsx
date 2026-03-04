@@ -1,119 +1,122 @@
 // money-tracker-fe/src/components/accounts/AccountModal.tsx
-
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Account, AccountRequest } from "@/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface Props {
-  // account diisi waktu edit, kosong waktu tambah baru
   account: Account | null;
+  open: boolean;
   onClose: () => void;
   onSave: (data: AccountRequest) => void;
   isSaving: boolean;
 }
 
-// Nilai awal form waktu modal pertama dibuka
-const emptyForm: AccountRequest = {
-  name: "",
-  type: "BANK",
-  initialBalance: 0,
-};
+const emptyForm: AccountRequest = { name: "", type: "BANK", initialBalance: 0 };
 
 export default function AccountModal({
   account,
+  open,
   onClose,
   onSave,
   isSaving,
 }: Props) {
   const [form, setForm] = useState<AccountRequest>(emptyForm);
-
-  // Kalau mode edit: isi form dengan data account yang mau diedit
-  // Kalau mode tambah: reset form ke kosong
-  // useEffect jalan tiap kali props "account" berubah
-  useEffect(() => {
-    if (account) {
-      setForm({
-        name: account.name,
-        type: account.type,
-        initialBalance: account.initialBalance,
-      });
-    } else {
-      setForm(emptyForm);
-    }
-  }, [account]);
-
   const isEditMode = account !== null;
 
+  // Isi form dengan data existing kalau mode edit, reset kalau mode tambah
+  useEffect(() => {
+    setForm(
+      account
+        ? {
+            name: account.name,
+            type: account.type,
+            initialBalance: account.initialBalance,
+          }
+        : emptyForm,
+    );
+  }, [account]);
+
   return (
-    // Overlay gelap di belakang modal
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-900 mb-4">
-          {isEditMode ? "Edit Account" : "Add Account"}
-        </h2>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-extrabold text-slate-900">
+            {isEditMode ? "Edit Account" : "Add Account"}
+          </DialogTitle>
+        </DialogHeader>
 
-        <div className="space-y-3">
-          {/* Nama account */}
-          <input
-            type="text"
-            placeholder="Account name (e.g. BCA, Cash, GoPay)"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
-          />
+        <div className="space-y-4 pt-1">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+              Account Name
+            </Label>
+            <Input
+              placeholder="e.g. BCA, Cash, GoPay"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </div>
 
-          {/* Tipe account: CASH, BANK, atau E-WALLET */}
-          <select
-            value={form.type}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                type: e.target.value as AccountRequest["type"],
-              })
-            }
-            className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
-          >
-            <option value="BANK">Bank</option>
-            <option value="CASH">Cash</option>
-            <option value="E-WALLET">E-Wallet</option>
-          </select>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+              Type
+            </Label>
+            <select
+              value={form.type}
+              onChange={(e) => setForm({ ...form, type: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+            >
+              <option value="BANK">🏦 Bank</option>
+              <option value="CASH">💵 Cash</option>
+              <option value="E-WALLET">📱 E-Wallet</option>
+            </select>
+          </div>
 
-          {/* Initial balance hanya bisa diubah waktu CREATE, bukan edit */}
-          {/* Karena balance sudah terpengaruh transaksi setelah dibuat */}
-          <input
-            type="number"
-            placeholder="Initial balance"
-            value={form.initialBalance || ""}
-            onChange={(e) =>
-              setForm({ ...form, initialBalance: Number(e.target.value) })
-            }
-            disabled={isEditMode}
-            className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:bg-slate-50 disabled:text-slate-400"
-          />
-          {isEditMode && (
-            <p className="text-xs text-slate-400">
-              Initial balance can't be changed after creation.
-            </p>
-          )}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+              Initial Balance
+            </Label>
+            <Input
+              type="number"
+              placeholder="0"
+              value={form.initialBalance || ""}
+              onChange={(e) =>
+                setForm({ ...form, initialBalance: Number(e.target.value) })
+              }
+              disabled={isEditMode}
+            />
+            {isEditMode && (
+              <p className="text-xs text-slate-400">
+                Cannot be changed after creation.
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="flex gap-3 mt-5">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-2.5 text-sm border border-slate-200 rounded-lg hover:bg-slate-50"
-          >
+        <div className="flex gap-3 pt-2">
+          <Button variant="outline" className="flex-1" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            className="flex-1 text-white font-bold"
             onClick={() => onSave(form)}
             disabled={isSaving || !form.name.trim()}
-            className="flex-1 bg-slate-900 text-white text-sm font-medium py-2.5 rounded-lg hover:bg-slate-700 disabled:bg-slate-300"
+            style={{ background: "linear-gradient(135deg, #0B1A3E, #1D4ED8)" }}
           >
             {isSaving ? "Saving..." : "Save"}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

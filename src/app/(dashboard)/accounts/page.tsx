@@ -1,6 +1,4 @@
 // money-tracker-fe/src/app/(dashboard)/accounts/page.tsx
-// Halaman utama manage accounts: list + add + edit + delete
-
 "use client";
 
 import { useState } from "react";
@@ -13,37 +11,53 @@ import {
   deleteAccount,
 } from "@/lib/accountApi";
 import AccountModal from "@/components/accounts/AccountModal";
+import { Button } from "@/components/ui/button";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 
-// Label badge per tipe account
-const TYPE_LABEL: Record<string, string> = {
-  BANK: "🏦 Bank",
-  CASH: "💵 Cash",
-  "E-WALLET": "📱 E-Wallet",
-};
+function formatRupiah(amount: number) {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(amount);
+}
+
+const TYPE_CONFIG: Record<string, { label: string; bg: string; icon: string }> =
+  {
+    BANK: {
+      label: "Bank",
+      bg: "linear-gradient(135deg, #DBEAFE, #93C5FD)",
+      icon: "🏦",
+    },
+    CASH: {
+      label: "Cash",
+      bg: "linear-gradient(135deg, #D1FAE5, #6EE7B7)",
+      icon: "💵",
+    },
+    "E-WALLET": {
+      label: "E-Wallet",
+      bg: "linear-gradient(135deg, #EDE9FE, #C4B5FD)",
+      icon: "📱",
+    },
+  };
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
+  const [modalTarget, setModalTarget] = useState<Account | "new" | null>(null);
 
-  // null = modal tutup, "new" = mode tambah, Account object = mode edit
-  const [modalTarget, setModalTarget] = useState<Account | null | "new">(null);
-
-  // Fetch semua accounts
   const { data: accounts, isLoading } = useQuery({
     queryKey: ["accounts"],
     queryFn: getAccounts,
   });
 
-  // Mutation: create account baru
   const { mutate: saveCreate, isPending: isCreating } = useMutation({
     mutationFn: (data: AccountRequest) => createAccount(data),
     onSuccess: () => {
-      // Setelah berhasil, refresh list accounts
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       setModalTarget(null);
     },
   });
 
-  // Mutation: update account yang sudah ada
   const { mutate: saveUpdate, isPending: isUpdating } = useMutation({
     mutationFn: ({ id, data }: { id: number; data: AccountRequest }) =>
       updateAccount(id, data),
@@ -53,18 +67,14 @@ export default function AccountsPage() {
     },
   });
 
-  // Mutation: hapus account
   const { mutate: removeAccount } = useMutation({
     mutationFn: (id: number) => deleteAccount(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      // Juga refresh summary di dashboard karena balance berubah
       queryClient.invalidateQueries({ queryKey: ["summary"] });
     },
   });
 
-  // Dipanggil waktu user klik Save di modal
-  // Bedain mode create vs edit dari tipe modalTarget
   const handleSave = (data: AccountRequest) => {
     if (modalTarget === "new") {
       saveCreate(data);
@@ -73,8 +83,7 @@ export default function AccountsPage() {
     }
   };
 
-  const handleDeleteWithConfirm = (account: Account) => {
-    // window.confirm = popup bawaan browser, simple dan cukup
+  const handleDelete = (account: Account) => {
     const confirmed = window.confirm(
       `Delete "${account.name}"? All transactions in this account will also be deleted.`,
     );
@@ -82,92 +91,153 @@ export default function AccountsPage() {
   };
 
   return (
-    <div className="p-6">
+    <div
+      className="p-4 sm:p-6"
+      style={{ background: "#F0F2F8", minHeight: "100%" }}
+    >
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Accounts</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+            Accounts
+          </h1>
+          <p className="text-sm text-slate-400 mt-0.5 font-medium">
             Manage your bank accounts, cash, and e-wallets.
           </p>
         </div>
-        <button
+        <Button
           onClick={() => setModalTarget("new")}
-          className="bg-slate-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-slate-700 transition-colors"
+          className="gap-2 font-bold text-white shadow-md"
+          style={{
+            background: "linear-gradient(135deg, #0B1A3E, #1D4ED8)",
+            boxShadow: "0 4px 12px rgba(29,78,216,0.3)",
+          }}
         >
-          + Add Account
-        </button>
+          <Plus size={16} />
+          <span className="hidden sm:inline">Add Account</span>
+          <span className="sm:hidden">Add</span>
+        </Button>
       </div>
 
-      {/* Loading state */}
-      {isLoading && <div className="text-slate-500">Loading accounts...</div>}
-
-      {/* Empty state */}
-      {!isLoading && accounts?.length === 0 && (
-        <div className="text-center text-slate-500 py-16">
-          <p className="text-4xl mb-3">🏦</p>
-          <p className="font-medium">No accounts yet</p>
-          <p className="text-sm mt-1">
-            Add your first account to start tracking.
-          </p>
+      {/* Loading skeleton */}
+      {isLoading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="h-44 rounded-2xl animate-pulse"
+              style={{ background: "rgba(255,255,255,0.7)" }}
+            />
+          ))}
         </div>
       )}
 
-      {/* Account Cards — satu card per account */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {accounts?.map((account) => (
+      {/* Empty state */}
+      {!isLoading && accounts?.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
           <div
-            key={account.id}
-            className="bg-white rounded-xl border border-slate-200 p-5"
+            className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4"
+            style={{ background: "linear-gradient(135deg, #DBEAFE, #93C5FD)" }}
           >
-            {/* Baris atas: nama + badge tipe */}
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="font-semibold text-slate-900">{account.name}</p>
-                <span className="text-xs text-slate-500 mt-0.5 inline-block">
-                  {TYPE_LABEL[account.type] ?? account.type}
-                </span>
+            🏦
+          </div>
+          <p className="font-bold text-slate-700 text-lg">No accounts yet</p>
+          <p className="text-sm text-slate-400 mt-1 mb-4">
+            Add your first account to start tracking.
+          </p>
+          <Button
+            onClick={() => setModalTarget("new")}
+            className="gap-2 text-white font-bold"
+            style={{ background: "linear-gradient(135deg, #0B1A3E, #1D4ED8)" }}
+          >
+            <Plus size={16} />
+            Add Account
+          </Button>
+        </div>
+      )}
+
+      {/* Account cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {accounts?.map((account: Account) => {
+          const config = TYPE_CONFIG[account.type] ?? {
+            label: account.type,
+            bg: "#F1F5F9",
+            icon: "💳",
+          };
+          return (
+            <div
+              key={account.id}
+              className="bg-white rounded-2xl p-5 flex flex-col justify-between"
+              style={{ boxShadow: "0 2px 16px rgba(0,0,0,0.07)" }}
+            >
+              {/* Top row: icon + name + type */}
+              <div className="flex items-start gap-3 mb-4">
+                <div
+                  className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
+                  style={{ background: config.bg }}
+                >
+                  {config.icon}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-extrabold text-slate-900 text-sm leading-tight truncate">
+                    {account.name}
+                  </p>
+                  <span className="text-xs font-semibold text-slate-400">
+                    {config.label}
+                  </span>
+                </div>
+              </div>
+
+              {/* Balance */}
+              <div className="mb-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
+                  Balance
+                </p>
+                <p
+                  className="font-extrabold text-2xl tracking-tight"
+                  style={{ color: account.balance < 0 ? "#EF4444" : "#0F172A" }}
+                >
+                  {formatRupiah(account.balance)}
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Initial: {formatRupiah(account.initialBalance)}
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 gap-1.5 font-semibold text-slate-600"
+                  onClick={() => setModalTarget(account)}
+                >
+                  <Pencil size={13} />
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 gap-1.5 font-semibold text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600"
+                  onClick={() => handleDelete(account)}
+                >
+                  <Trash2 size={13} />
+                  Delete
+                </Button>
               </div>
             </div>
-
-            {/* Balance */}
-            <p className="text-2xl font-bold text-slate-900 mt-4">
-              Rp {account.balance.toLocaleString("id-ID")}
-            </p>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Initial: Rp {account.initialBalance.toLocaleString("id-ID")}
-            </p>
-
-            {/* Tombol Edit & Delete */}
-            <div className="flex gap-2 mt-4">
-              <button
-                onClick={() => setModalTarget(account)}
-                className="flex-1 text-sm px-3 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => handleDeleteWithConfirm(account)}
-                className="flex-1 text-sm px-3 py-2 border border-red-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Modal: muncul kalau modalTarget bukan null */}
-      {modalTarget !== null && (
-        <AccountModal
-          // Kalau "new" → kirim null ke modal (mode tambah)
-          // Kalau Account object → kirim data account (mode edit)
-          account={modalTarget === "new" ? null : modalTarget}
-          onClose={() => setModalTarget(null)}
-          onSave={handleSave}
-          isSaving={isCreating || isUpdating}
-        />
-      )}
+      {/* Modal */}
+      <AccountModal
+        account={modalTarget === "new" ? null : modalTarget}
+        open={modalTarget !== null}
+        onClose={() => setModalTarget(null)}
+        onSave={handleSave}
+        isSaving={isCreating || isUpdating}
+      />
     </div>
   );
 }
