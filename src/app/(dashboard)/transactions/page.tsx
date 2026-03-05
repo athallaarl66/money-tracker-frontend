@@ -1,3 +1,5 @@
+// src/app/(dashboard)/transactions/page.tsx
+
 "use client";
 
 import { useState } from "react";
@@ -12,7 +14,21 @@ import {
 import { getAccounts } from "@/lib/accountApi";
 import TransactionModal from "@/components/transactions/TransactionModal";
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2, TrendingUp, TrendingDown } from "lucide-react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  TrendingUp,
+  TrendingDown,
+  Search,
+  X,
+  Download,
+} from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { CATEGORY_EMOJI } from "@/components/transactions/TransactionModal";
+import { exportTransactionsCsv } from "@/lib/exportApi";
+
+// ─── Helpers ─────────────────────────────────────────────────────
 
 function formatRupiah(amount: number) {
   return new Intl.NumberFormat("id-ID", {
@@ -30,7 +46,7 @@ function formatDate(dateStr: string) {
   });
 }
 
-// Kelompokkan transaksi berdasarkan tanggal
+// Kelompokkan transaksi berdasarkan tanggal (YYYY-MM-DD)
 function groupByDate(
   transactions: Transaction[],
 ): Record<string, Transaction[]> {
@@ -45,27 +61,70 @@ function groupByDate(
   );
 }
 
-const CATEGORY_ICONS: Record<string, string> = {
-  "Food & Drink": "🍜",
-  Transport: "🚗",
-  Shopping: "🛍️",
-  Health: "🏥",
-  Entertainment: "🎬",
-  Education: "📚",
-  Bills: "🧾",
-  Salary: "💼",
-  Investment: "📈",
-  Other: "💡",
-};
+// ─── Delete confirm dialog — gantiin window.confirm yang jelek ───
+
+function DeleteConfirmDialog({
+  tx,
+  onConfirm,
+  onCancel,
+}: {
+  tx: Transaction;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onCancel}
+      />
+      <div
+        className="relative bg-white rounded-2xl p-6 max-w-sm w-full"
+        style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}
+      >
+        <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center mb-4">
+          <Trash2 size={18} className="text-red-500" />
+        </div>
+        <h3 className="font-bold text-slate-900 text-base mb-1">
+          Delete transaction?
+        </h3>
+        <p className="text-sm text-slate-400 mb-5">
+          "{tx.description}" will be permanently removed.
+        </p>
+        <div className="flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            className="flex-1 text-white font-bold"
+            onClick={onConfirm}
+            style={{ background: "linear-gradient(135deg, #DC2626, #EF4444)" }}
+          >
+            Delete
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────
 
 export default function TransactionsPage() {
   const queryClient = useQueryClient();
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Transaction | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Filter state
+  const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"ALL" | "INCOME" | "EXPENSE">(
     "ALL",
   );
   const [filterAccount, setFilterAccount] = useState<number>(0);
+  const [filterCategory, setFilterCategory] = useState<string>("ALL");
 
   const { data: transactions = [], isLoading } = useQuery({
     queryKey: ["transactions"],
@@ -77,6 +136,13 @@ export default function TransactionsPage() {
     queryFn: getAccounts,
   });
 
+  // Ambil semua kategori unik dari data yang ada
+  const availableCategories = Array.from(
+    new Set(transactions.map((tx) => tx.category)),
+  ).sort();
+
+  // ── Mutations ──
+
   const { mutate: saveCreate, isPending: isCreating } = useMutation({
     mutationFn: (data: TransactionRequest) =>
       createTransaction(data.accountId, data),
@@ -85,6 +151,11 @@ export default function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       queryClient.invalidateQueries({ queryKey: ["summary"] });
       setModalOpen(false);
+      toast.success("Transaction added", "Your transaction has been recorded.");
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      toast.error("Failed to save", msg ?? "Please try again.");
     },
   });
 
@@ -97,18 +168,31 @@ export default function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["summary"] });
       setEditTarget(null);
       setModalOpen(false);
+      toast.success("Transaction updated", "Changes have been saved.");
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      toast.error("Failed to update", msg ?? "Please try again.");
     },
   });
 
-  const { mutate: remove } = useMutation({
+  const { mutate: remove, isPending: isDeleting } = useMutation({
     mutationFn: ({ accountId, id }: { accountId: number; id: number }) =>
       deleteTransaction(accountId, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       queryClient.invalidateQueries({ queryKey: ["summary"] });
+      setDeleteTarget(null);
+      toast.success("Transaction deleted");
+    },
+    onError: () => {
+      setDeleteTarget(null);
+      toast.error("Failed to delete", "Please try again.");
     },
   });
+
+  // ── Handlers ──
 
   const handleSave = (data: TransactionRequest) => {
     if (editTarget) {
@@ -123,10 +207,9 @@ export default function TransactionsPage() {
     setModalOpen(true);
   };
 
-  const handleDelete = (tx: Transaction) => {
-    if (window.confirm(`Delete "${tx.description}"?`)) {
-      remove({ accountId: tx.accountId, id: tx.id });
-    }
+  const handleDeleteConfirm = () => {
+    if (!deleteTarget) return;
+    remove({ accountId: deleteTarget.accountId, id: deleteTarget.id });
   };
 
   const handleAddNew = () => {
@@ -134,20 +217,48 @@ export default function TransactionsPage() {
     setModalOpen(true);
   };
 
-  // Filter transaksi sesuai pilihan user
+  const handleExport = async () => {
+    setIsExporting(true);
+    await exportTransactionsCsv();
+    setIsExporting(false);
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setFilterType("ALL");
+    setFilterAccount(0);
+    setFilterCategory("ALL");
+  };
+
+  // ── Filter logic ──
+
   const filtered = transactions.filter((tx) => {
-    const typeMatch = filterType === "ALL" || tx.transactionType === filterType;
-    const accountMatch = filterAccount === 0 || tx.accountId === filterAccount;
-    return typeMatch && accountMatch;
+    const matchType = filterType === "ALL" || tx.transactionType === filterType;
+    const matchAccount = filterAccount === 0 || tx.accountId === filterAccount;
+    const matchCategory =
+      filterCategory === "ALL" || tx.category === filterCategory;
+    // Search by description atau category — case insensitive
+    const matchSearch =
+      !search ||
+      tx.description.toLowerCase().includes(search.toLowerCase()) ||
+      tx.category.toLowerCase().includes(search.toLowerCase());
+
+    return matchType && matchAccount && matchCategory && matchSearch;
   });
+
+  const hasActiveFilter =
+    search ||
+    filterType !== "ALL" ||
+    filterAccount !== 0 ||
+    filterCategory !== "ALL";
 
   const grouped = groupByDate(filtered);
   const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
-  // Hitung total income & expense dari filtered
   const totalIncome = filtered
     .filter((t) => t.transactionType === "INCOME")
     .reduce((sum, t) => sum + t.amount, 0);
+
   const totalExpense = filtered
     .filter((t) => t.transactionType === "EXPENSE")
     .reduce((sum, t) => sum + t.amount, 0);
@@ -165,33 +276,49 @@ export default function TransactionsPage() {
           </h1>
           <p className="text-sm text-slate-400 mt-0.5 font-medium">
             {filtered.length} transaction{filtered.length !== 1 ? "s" : ""}
+            {hasActiveFilter && " (filtered)"}
           </p>
         </div>
-        <Button
-          onClick={handleAddNew}
-          className="gap-2 font-bold text-white shadow-md"
-          style={{
-            background: "linear-gradient(135deg, #0B1A3E, #1D4ED8)",
-            boxShadow: "0 4px 12px rgba(29,78,216,0.3)",
-          }}
-        >
-          <Plus size={16} />
-          <span className="hidden sm:inline">Add Transaction</span>
-          <span className="sm:hidden">Add</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Export CSV button */}
+          <Button
+            onClick={handleExport}
+            disabled={isExporting || transactions.length === 0}
+            variant="outline"
+            className="gap-2 font-bold text-slate-600 border-slate-200"
+          >
+            <Download size={15} />
+            <span className="hidden sm:inline">
+              {isExporting ? "Exporting..." : "Export CSV"}
+            </span>
+          </Button>
+
+          <Button
+            onClick={handleAddNew}
+            className="gap-2 font-bold text-white shadow-md"
+            style={{
+              background: "linear-gradient(135deg, #0B1A3E, #1D4ED8)",
+              boxShadow: "0 4px 12px rgba(29,78,216,0.3)",
+            }}
+          >
+            <Plus size={16} />
+            <span className="hidden sm:inline">Add Transaction</span>
+            <span className="sm:hidden">Add</span>
+          </Button>
+        </div>
       </div>
 
-      {/* Summary mini cards */}
+      {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3 mb-5">
         <div
           className="bg-white rounded-2xl px-4 py-3 flex items-center gap-3"
           style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}
         >
           <div
-            className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
             style={{ background: "linear-gradient(135deg, #D1FAE5, #6EE7B7)" }}
           >
-            <TrendingUp size={15} color="#059669" />
+            <TrendingUp size={14} color="#059669" />
           </div>
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">
@@ -205,15 +332,16 @@ export default function TransactionsPage() {
             </p>
           </div>
         </div>
+
         <div
           className="bg-white rounded-2xl px-4 py-3 flex items-center gap-3"
           style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}
         >
           <div
-            className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
             style={{ background: "linear-gradient(135deg, #FEE2E2, #FECACA)" }}
           >
-            <TrendingDown size={15} color="#DC2626" />
+            <TrendingDown size={14} color="#DC2626" />
           </div>
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">
@@ -229,9 +357,34 @@ export default function TransactionsPage() {
         </div>
       </div>
 
+      {/* Search bar */}
+      <div className="relative mb-3">
+        <Search
+          size={15}
+          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+        />
+        <input
+          type="text"
+          placeholder="Search by description or category..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full pl-9 pr-9 py-2.5 text-sm bg-white border border-slate-200 rounded-xl
+                     focus:outline-none focus:border-slate-400 focus:shadow-[0_0_0_3px_rgba(0,0,0,0.06)]
+                     transition-all placeholder:text-slate-300"
+        />
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
       {/* Filter bar */}
       <div className="flex items-center gap-2 mb-5 flex-wrap">
-        {/* Filter by type */}
+        {/* Type filter */}
         {(["ALL", "INCOME", "EXPENSE"] as const).map((type) => (
           <button
             key={type}
@@ -259,11 +412,27 @@ export default function TransactionsPage() {
           </button>
         ))}
 
-        {/* Filter by account */}
+        {/* Category filter */}
+        <select
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value)}
+          className="px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-xl bg-white
+                     text-slate-600 focus:outline-none"
+        >
+          <option value="ALL">All Categories</option>
+          {availableCategories.map((cat) => (
+            <option key={cat} value={cat}>
+              {CATEGORY_EMOJI[cat] ?? "📦"} {cat}
+            </option>
+          ))}
+        </select>
+
+        {/* Account filter */}
         <select
           value={filterAccount}
           onChange={(e) => setFilterAccount(Number(e.target.value))}
-          className="ml-auto px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-xl bg-white text-slate-600 focus:outline-none"
+          className="px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-xl bg-white
+                     text-slate-600 focus:outline-none"
         >
           <option value={0}>All Accounts</option>
           {accounts.map((acc) => (
@@ -272,17 +441,25 @@ export default function TransactionsPage() {
             </option>
           ))}
         </select>
+
+        {/* Clear filter button — muncul kalau ada filter aktif */}
+        {hasActiveFilter && (
+          <button
+            onClick={clearFilters}
+            className="ml-auto flex items-center gap-1 px-3 py-1.5 text-xs font-bold
+                       text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            <X size={12} />
+            Clear
+          </button>
+        )}
       </div>
 
       {/* Loading skeleton */}
       {isLoading && (
         <div className="space-y-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-16 rounded-2xl animate-pulse"
-              style={{ background: "rgba(255,255,255,0.7)" }}
-            />
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-16 rounded-2xl skeleton" />
           ))}
         </div>
       )}
@@ -290,19 +467,35 @@ export default function TransactionsPage() {
       {/* Empty state */}
       {!isLoading && filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="text-4xl mb-3">📭</div>
-          <p className="font-bold text-slate-700">No transactions yet</p>
-          <p className="text-sm text-slate-400 mt-1 mb-4">
-            Start by adding your first transaction.
+          <div className="text-4xl mb-3">{hasActiveFilter ? "🔍" : "📭"}</div>
+          <p className="font-bold text-slate-700">
+            {hasActiveFilter ? "No results found" : "No transactions yet"}
           </p>
-          <Button
-            onClick={handleAddNew}
-            className="gap-2 text-white font-bold"
-            style={{ background: "linear-gradient(135deg, #0B1A3E, #1D4ED8)" }}
-          >
-            <Plus size={16} />
-            Add Transaction
-          </Button>
+          <p className="text-sm text-slate-400 mt-1 mb-4">
+            {hasActiveFilter
+              ? "Try adjusting your filters."
+              : "Start by adding your first transaction."}
+          </p>
+          {!hasActiveFilter && (
+            <Button
+              onClick={handleAddNew}
+              className="gap-2 text-white font-bold"
+              style={{
+                background: "linear-gradient(135deg, #0B1A3E, #1D4ED8)",
+              }}
+            >
+              <Plus size={16} />
+              Add Transaction
+            </Button>
+          )}
+          {hasActiveFilter && (
+            <button
+              onClick={clearFilters}
+              className="text-sm font-bold text-blue-600 hover:underline"
+            >
+              Clear all filters
+            </button>
+          )}
         </div>
       )}
 
@@ -310,7 +503,6 @@ export default function TransactionsPage() {
       <div className="space-y-5">
         {sortedDates.map((date) => (
           <div key={date}>
-            {/* Date header */}
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">
               {formatDate(date)}
             </p>
@@ -324,7 +516,7 @@ export default function TransactionsPage() {
                 >
                   {/* Category icon */}
                   <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0"
                     style={{
                       background:
                         tx.transactionType === "INCOME"
@@ -332,7 +524,7 @@ export default function TransactionsPage() {
                           : "linear-gradient(135deg, #FEE2E2, #FECACA)",
                     }}
                   >
-                    {CATEGORY_ICONS[tx.category] ?? "💡"}
+                    {CATEGORY_EMOJI[tx.category] ?? "📦"}
                   </div>
 
                   {/* Description + meta */}
@@ -346,24 +538,20 @@ export default function TransactionsPage() {
                   </div>
 
                   {/* Amount */}
-                  <div className="text-right flex-shrink-0">
-                    <p
-                      className="font-extrabold text-sm"
-                      style={{
-                        color:
-                          tx.transactionType === "INCOME"
-                            ? "#059669"
-                            : "#DC2626",
-                        letterSpacing: "-0.3px",
-                      }}
-                    >
-                      {tx.transactionType === "INCOME" ? "+" : "-"}
-                      {formatRupiah(tx.amount)}
-                    </p>
-                  </div>
+                  <p
+                    className="font-extrabold text-sm shrink-0"
+                    style={{
+                      color:
+                        tx.transactionType === "INCOME" ? "#059669" : "#DC2626",
+                      letterSpacing: "-0.3px",
+                    }}
+                  >
+                    {tx.transactionType === "INCOME" ? "+" : "-"}
+                    {formatRupiah(tx.amount)}
+                  </p>
 
-                  {/* Edit & Delete */}
-                  <div className="flex gap-1 flex-shrink-0">
+                  {/* Actions */}
+                  <div className="flex gap-1 shrink-0">
                     <Button
                       variant="ghost"
                       size="icon"
@@ -376,7 +564,8 @@ export default function TransactionsPage() {
                       variant="ghost"
                       size="icon"
                       className="w-7 h-7 text-slate-400 hover:text-red-500"
-                      onClick={() => handleDelete(tx)}
+                      onClick={() => setDeleteTarget(tx)}
+                      disabled={isDeleting}
                     >
                       <Trash2 size={13} />
                     </Button>
@@ -388,7 +577,7 @@ export default function TransactionsPage() {
         ))}
       </div>
 
-      {/* Modal */}
+      {/* Modal add/edit */}
       <TransactionModal
         open={modalOpen}
         onClose={() => {
@@ -410,6 +599,15 @@ export default function TransactionsPage() {
             : null
         }
       />
+
+      {/* Delete confirmation dialog — gantiin window.confirm */}
+      {deleteTarget && (
+        <DeleteConfirmDialog
+          tx={deleteTarget}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }

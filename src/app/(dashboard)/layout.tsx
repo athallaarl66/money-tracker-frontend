@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 import useAuthStore from "@/store/authStore";
 import Sidebar from "@/components/shared/Sidebar";
+import Toaster from "@/components/ui/toaster";
 
 const navLabels: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -29,12 +30,16 @@ export default function DashboardLayout({
   useEffect(() => {
     setMounted(true);
   }, []);
+
   useEffect(() => {
     if (mounted && !isAuthenticated) router.replace("/login");
   }, [mounted, isAuthenticated, router]);
+
   useEffect(() => {
     setDrawerOpen(false);
   }, [pathname]);
+
+  // Cegah body scroll waktu drawer mobile terbuka
   useEffect(() => {
     document.body.style.overflow = drawerOpen ? "hidden" : "";
     return () => {
@@ -82,7 +87,7 @@ export default function DashboardLayout({
         <Sidebar onClose={() => setDrawerOpen(false)} />
       </div>
 
-      {/* Main */}
+      {/* Main content */}
       <main className="flex-1 md:ml-56 flex flex-col min-w-0">
         {/* Topbar */}
         <header className="sticky top-0 z-10 px-4 md:px-6 py-3.5 flex items-center justify-between bg-[#F0F2F8]/90 backdrop-blur-md border-b border-black/5">
@@ -99,6 +104,7 @@ export default function DashboardLayout({
               {navLabels[pathname] ?? "Dashboard"}
             </p>
           </div>
+
           <p className="text-xs font-medium text-slate-400 hidden sm:block">
             {new Date().toLocaleDateString("en-US", {
               weekday: "long",
@@ -117,6 +123,9 @@ export default function DashboardLayout({
 
         <div className="flex-1">{children}</div>
       </main>
+
+      {/* Toast notifications — fixed bottom-right, z-index tertinggi biar ga ketutup modal */}
+      <Toaster />
     </div>
   );
 }

@@ -1,4 +1,5 @@
-// money-tracker-fe/src/app/(dashboard)/accounts/page.tsx
+// src/app/(dashboard)/accounts/page.tsx
+
 "use client";
 
 import { useState } from "react";
@@ -13,6 +14,9 @@ import {
 import AccountModal from "@/components/accounts/AccountModal";
 import { Button } from "@/components/ui/button";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+
+// ─── Helpers ─────────────────────────────────────────────────────
 
 function formatRupiah(amount: number) {
   return new Intl.NumberFormat("id-ID", {
@@ -41,9 +45,71 @@ const TYPE_CONFIG: Record<string, { label: string; bg: string; icon: string }> =
     },
   };
 
+// ─── Delete confirm dialog — konsisten sama transactions page ─────
+
+function DeleteConfirmDialog({
+  account,
+  onConfirm,
+  onCancel,
+  isDeleting,
+}: {
+  account: Account;
+  onConfirm: () => void;
+  onCancel: () => void;
+  isDeleting: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onCancel}
+      />
+      <div
+        className="relative bg-white rounded-2xl p-6 max-w-sm w-full"
+        style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}
+      >
+        <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center mb-4">
+          <Trash2 size={18} className="text-red-500" />
+        </div>
+        <h3 className="font-bold text-slate-900 text-base mb-1">
+          Delete account?
+        </h3>
+        {/* Warning — ini destructive, kasih tau user konsekuensinya */}
+        <p className="text-sm text-slate-400 mb-1">
+          "{account.name}" will be permanently deleted.
+        </p>
+        <p className="text-xs text-red-400 font-medium mb-5">
+          ⚠️ All transactions in this account will also be deleted.
+        </p>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={onCancel}
+            disabled={isDeleting}
+          >
+            Cancel
+          </Button>
+          <Button
+            className="flex-1 text-white font-bold"
+            onClick={onConfirm}
+            disabled={isDeleting}
+            style={{ background: "linear-gradient(135deg, #DC2626, #EF4444)" }}
+          >
+            {isDeleting ? "Deleting..." : "Delete"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────
+
 export default function AccountsPage() {
   const queryClient = useQueryClient();
   const [modalTarget, setModalTarget] = useState<Account | "new" | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
 
   const { data: accounts, isLoading } = useQuery({
     queryKey: ["accounts"],
@@ -55,6 +121,11 @@ export default function AccountsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       setModalTarget(null);
+      toast.success("Account created", "Your new account is ready to use.");
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      toast.error("Failed to create", msg ?? "Please try again.");
     },
   });
 
@@ -64,14 +135,26 @@ export default function AccountsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       setModalTarget(null);
+      toast.success("Account updated", "Changes have been saved.");
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message;
+      toast.error("Failed to update", msg ?? "Please try again.");
     },
   });
 
-  const { mutate: removeAccount } = useMutation({
+  const { mutate: removeAccount, isPending: isDeleting } = useMutation({
     mutationFn: (id: number) => deleteAccount(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       queryClient.invalidateQueries({ queryKey: ["summary"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      setDeleteTarget(null);
+      toast.success("Account deleted");
+    },
+    onError: () => {
+      setDeleteTarget(null);
+      toast.error("Failed to delete", "Please try again.");
     },
   });
 
@@ -79,15 +162,8 @@ export default function AccountsPage() {
     if (modalTarget === "new") {
       saveCreate(data);
     } else if (modalTarget !== null) {
-      saveUpdate({ id: modalTarget.id, data });
+      saveUpdate({ id: (modalTarget as Account).id, data });
     }
-  };
-
-  const handleDelete = (account: Account) => {
-    const confirmed = window.confirm(
-      `Delete "${account.name}"? All transactions in this account will also be deleted.`,
-    );
-    if (confirmed) removeAccount(account.id);
   };
 
   return (
@@ -122,12 +198,8 @@ export default function AccountsPage() {
       {/* Loading skeleton */}
       {isLoading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-44 rounded-2xl animate-pulse"
-              style={{ background: "rgba(255,255,255,0.7)" }}
-            />
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-44 rounded-2xl skeleton" />
           ))}
         </div>
       )}
@@ -164,16 +236,17 @@ export default function AccountsPage() {
             bg: "#F1F5F9",
             icon: "💳",
           };
+
           return (
             <div
               key={account.id}
               className="bg-white rounded-2xl p-5 flex flex-col justify-between"
               style={{ boxShadow: "0 2px 16px rgba(0,0,0,0.07)" }}
             >
-              {/* Top row: icon + name + type */}
+              {/* Top: icon + name + type */}
               <div className="flex items-start gap-3 mb-4">
                 <div
-                  className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
+                  className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0"
                   style={{ background: config.bg }}
                 >
                   {config.icon}
@@ -219,7 +292,7 @@ export default function AccountsPage() {
                   variant="outline"
                   size="sm"
                   className="flex-1 gap-1.5 font-semibold text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600"
-                  onClick={() => handleDelete(account)}
+                  onClick={() => setDeleteTarget(account)}
                 >
                   <Trash2 size={13} />
                   Delete
@@ -230,14 +303,24 @@ export default function AccountsPage() {
         })}
       </div>
 
-      {/* Modal */}
+      {/* Modal add/edit */}
       <AccountModal
-        account={modalTarget === "new" ? null : modalTarget}
+        account={modalTarget === "new" ? null : (modalTarget as Account | null)}
         open={modalTarget !== null}
         onClose={() => setModalTarget(null)}
         onSave={handleSave}
         isSaving={isCreating || isUpdating}
       />
+
+      {/* Delete confirmation */}
+      {deleteTarget && (
+        <DeleteConfirmDialog
+          account={deleteTarget}
+          onConfirm={() => removeAccount(deleteTarget.id)}
+          onCancel={() => setDeleteTarget(null)}
+          isDeleting={isDeleting}
+        />
+      )}
     </div>
   );
 }
