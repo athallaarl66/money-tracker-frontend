@@ -86,3 +86,21 @@ export interface AccountBalanceResponse {
   totalExpense: number;
   currentBalance: number;
 }
+
+// ===== BUDGETS =====
+
+export interface Budget {
+  id: number;
+  category: string;
+  limitAmount: number;
+  spentAmount: number;
+  percentage: number; // 0–100+, bisa lebih dari 100 kalau over budget
+  remainingAmount: number; // bisa negatif kalau over budget
+  budgetMonth: string; // format "YYYY-MM"
+}
+
+export interface BudgetRequest {
+  category: string;
+  limitAmount: number;
+  budgetMonth: string; // format "YYYY-MM"
+}

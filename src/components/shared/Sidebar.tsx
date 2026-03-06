@@ -13,6 +13,7 @@ import {
   LogOut,
   X,
   Clock,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Accounts", href: "/accounts", icon: CreditCard },
   { label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
+  { label: "Budget", href: "/budgets", icon: Wallet },
   { label: "Analytics", href: "/analytics", icon: BarChart2 },
 ];
 
