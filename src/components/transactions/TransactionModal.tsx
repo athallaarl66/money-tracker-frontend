@@ -1,4 +1,5 @@
 // components/transactions/TransactionModal.tsx
+// components/transactions/TransactionModal.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -14,6 +15,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  EXPENSE_CATEGORIES,
+  INCOME_CATEGORIES,
+  CATEGORY_EMOJI,
+} from "@/lib/categories";
 
 interface Props {
   open: boolean;
@@ -23,31 +29,9 @@ interface Props {
   initial?: TransactionRequest | null;
 }
 
-export const CATEGORIES = [
-  "Food & Drink",
-  "Transport",
-  "Shopping",
-  "Health",
-  "Entertainment",
-  "Education",
-  "Bills",
-  "Salary",
-  "Investment",
-  "Other",
-] as const;
-
-export const CATEGORY_EMOJI: Record<string, string> = {
-  "Food & Drink": "🍜",
-  Transport: "🚗",
-  Shopping: "🛍️",
-  Health: "💊",
-  Entertainment: "🎮",
-  Education: "📚",
-  Bills: "📄",
-  Salary: "💼",
-  Investment: "📈",
-  Other: "📦",
-};
+// Re-export CATEGORY_EMOJI supaya TransactionsPage bisa import dari sini
+// (backward compat — jangan hapus)
+export { CATEGORY_EMOJI };
 
 const emptyForm: TransactionRequest = {
   accountId: 0,
@@ -66,7 +50,6 @@ export default function TransactionModal({
   initial,
 }: Props) {
   const [form, setForm] = useState<TransactionRequest>(emptyForm);
-  // Validasi error ditampilin inline per field — lebih UX friendly dari toast
   const [errors, setErrors] = useState<
     Partial<Record<keyof TransactionRequest, string>>
   >({});
@@ -76,41 +59,38 @@ export default function TransactionModal({
     queryFn: getAccounts,
   });
 
-  // Reset form setiap modal dibuka
   useEffect(() => {
     setForm(initial ?? { ...emptyForm, accountId: accounts?.[0]?.id ?? 0 });
     setErrors({});
   }, [initial, accounts, open]);
 
-  // Validasi semua field sebelum submit
   const validate = (): boolean => {
     const next: Partial<Record<keyof TransactionRequest, string>> = {};
-
     if (!form.accountId || form.accountId === 0)
       next.accountId = "Please select an account";
     if (!form.description.trim()) next.description = "Description is required";
     if (!form.amount || form.amount <= 0)
       next.amount = "Amount must be greater than 0";
     if (!form.transactionDate) next.transactionDate = "Date is required";
-
     setErrors(next);
     return Object.keys(next).length === 0;
   };
 
   const handleSave = () => {
     if (!validate()) return;
-
     onSave({
       ...form,
-      // Sanitize sebelum kirim — trim whitespace, amount selalu positif
       description: form.description.trim(),
       amount: Math.abs(form.amount),
     });
   };
 
-  // Helper biar ga nulis className error berulang
   const fieldClass = (hasError: boolean) =>
     hasError ? "border-red-300 focus:ring-red-400" : "";
+
+  // Kategori berubah sesuai tipe transaksi
+  const categories =
+    form.transactionType === "INCOME" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -128,7 +108,14 @@ export default function TransactionModal({
               <button
                 key={type}
                 type="button"
-                onClick={() => setForm({ ...form, transactionType: type })}
+                onClick={() =>
+                  setForm({
+                    ...form,
+                    transactionType: type,
+                    // Reset kategori supaya ga stuck di kategori tipe sebelumnya
+                    category: type === "INCOME" ? "Salary" : "Other",
+                  })
+                }
                 className="py-2 rounded-xl text-sm font-bold border transition-all"
                 style={
                   form.transactionType === type
@@ -159,8 +146,7 @@ export default function TransactionModal({
                 setForm({ ...form, accountId: Number(e.target.value) });
                 setErrors((prev) => ({ ...prev, accountId: undefined }));
               }}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md bg-white
-                         focus:outline-none focus:ring-2 focus:ring-slate-900"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
             >
               <option value={0} disabled>
                 Select account
@@ -182,7 +168,7 @@ export default function TransactionModal({
               Description
             </Label>
             <Input
-              placeholder="e.g. Makan siang, Gaji bulanan"
+              placeholder="e.g. Lunch, Monthly salary"
               value={form.description}
               onChange={(e) => {
                 setForm({ ...form, description: e.target.value });
@@ -217,7 +203,7 @@ export default function TransactionModal({
             )}
           </div>
 
-          {/* Category */}
+          {/* Category — dinamis sesuai tipe */}
           <div className="space-y-1.5">
             <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
               Category
@@ -225,10 +211,9 @@ export default function TransactionModal({
             <select
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md bg-white
-                         focus:outline-none focus:ring-2 focus:ring-slate-900"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
             >
-              {CATEGORIES.map((c) => (
+              {categories.map((c) => (
                 <option key={c} value={c}>
                   {CATEGORY_EMOJI[c]} {c}
                 </option>

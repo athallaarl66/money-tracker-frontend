@@ -12,13 +12,10 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
 
-  // Actions
   setAuth: (token: string, user: User) => void;
   logout: () => void;
 }
 
-// persist middleware — otomatis sync state ke localStorage
-// jadi kalau refresh, user tetap login
 const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -27,17 +24,17 @@ const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
 
       setAuth: (token, user) => {
-        localStorage.setItem("token", token);
+        // persist middleware sudah handle simpan ke localStorage secara otomatis
+        // tidak perlu localStorage.setItem manual — itu yang bikin konflik
         set({ token, user, isAuthenticated: true });
       },
 
       logout: () => {
-        localStorage.removeItem("token");
         set({ token: null, user: null, isAuthenticated: false });
       },
     }),
     {
-      name: "auth-storage", // key di localStorage
+      name: "auth-storage",
     },
   ),
 );

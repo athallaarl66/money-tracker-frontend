@@ -14,6 +14,7 @@ import {
   X,
   Clock,
   Wallet,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,7 @@ const navItems = [
   { label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
   { label: "Budget", href: "/budgets", icon: Wallet },
   { label: "Analytics", href: "/analytics", icon: BarChart2 },
+  { label: "Recurring", href: "/recurring", icon: RefreshCw },
 ];
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {

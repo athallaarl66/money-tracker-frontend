@@ -5,17 +5,7 @@ import { Budget, BudgetRequest } from "@/types";
 import { createBudget, updateBudget } from "@/lib/budgetApi";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/utils";
-
-const EXPENSE_CATEGORIES = [
-  "Makanan & Minuman",
-  "Transportasi",
-  "Belanja",
-  "Kesehatan",
-  "Hiburan",
-  "Pendidikan",
-  "Tagihan & Utilitas",
-  "Lainnya",
-];
+import { EXPENSE_CATEGORIES } from "@/lib/categories";
 
 interface BudgetModalProps {
   isOpen: boolean;
@@ -64,9 +54,9 @@ export default function BudgetModal({
 
   function validate(): boolean {
     const newErrors: FormErrors = {};
-    if (!form.category) newErrors.category = "Pilih kategori terlebih dahulu";
+    if (!form.category) newErrors.category = "Please select a category";
     if (!form.limitAmount || form.limitAmount < 1000)
-      newErrors.limitAmount = "Limit minimal Rp 1.000";
+      newErrors.limitAmount = "Minimum limit is Rp 1,000";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
@@ -84,20 +74,20 @@ export default function BudgetModal({
     try {
       if (isEdit && editData) {
         await updateBudget(editData.id, form);
-        toast.success("Budget berhasil diperbarui");
+        toast.success("Budget updated");
       } else {
         await createBudget(form);
-        toast.success("Budget berhasil ditambahkan");
+        toast.success("Budget added");
       }
       onSuccess();
       onClose();
     } catch (err: unknown) {
       const raw = err instanceof Error ? err.message : "";
       const message = raw.includes("sudah ada")
-        ? raw
+        ? "Budget for this category already exists this month"
         : isEdit
-          ? "Gagal memperbarui budget"
-          : "Gagal menambahkan budget";
+          ? "Failed to update budget"
+          : "Failed to add budget";
       toast.error(message);
     } finally {
       setIsSubmitting(false);
@@ -115,7 +105,7 @@ export default function BudgetModal({
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold text-gray-900">
-            {isEdit ? "Edit Budget" : "Tambah Budget"}
+            {isEdit ? "Edit Budget" : "Add Budget"}
           </h2>
           <button
             onClick={onClose}
@@ -128,7 +118,7 @@ export default function BudgetModal({
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Kategori
+              Category
             </label>
             <select
               value={form.category}
@@ -139,7 +129,7 @@ export default function BudgetModal({
                   : "border-gray-200 focus:border-blue-500"
               }`}
             >
-              <option value="">Pilih kategori...</option>
+              <option value="">Select category...</option>
               {EXPENSE_CATEGORIES.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
@@ -153,7 +143,7 @@ export default function BudgetModal({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Limit Budget
+              Budget Limit
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500 font-medium">
@@ -185,9 +175,9 @@ export default function BudgetModal({
           </div>
 
           <div className="px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-100">
-            <p className="text-xs text-gray-500">Bulan</p>
+            <p className="text-xs text-gray-500">Month</p>
             <p className="text-sm font-medium text-gray-700 mt-0.5">
-              {new Date(selectedMonth + "-01").toLocaleDateString("id-ID", {
+              {new Date(selectedMonth + "-01").toLocaleDateString("en-US", {
                 month: "long",
                 year: "numeric",
               })}
@@ -201,7 +191,7 @@ export default function BudgetModal({
             disabled={isSubmitting}
             className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
           >
-            Batal
+            Cancel
           </button>
           <button
             onClick={handleSubmit}
@@ -213,10 +203,10 @@ export default function BudgetModal({
             }}
           >
             {isSubmitting
-              ? "Menyimpan..."
+              ? "Saving..."
               : isEdit
-                ? "Simpan Perubahan"
-                : "Tambah Budget"}
+                ? "Save Changes"
+                : "Add Budget"}
           </button>
         </div>
       </div>

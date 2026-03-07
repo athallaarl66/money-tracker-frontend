@@ -104,3 +104,31 @@ export interface BudgetRequest {
   limitAmount: number;
   budgetMonth: string; // format "YYYY-MM"
 }
+
+// ===== recurring =====
+
+export type Frequency = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+
+export interface RecurringTransaction {
+  id: number;
+  accountId: number;
+  accountName: string;
+  description: string;
+  amount: number;
+  transactionType: "INCOME" | "EXPENSE";
+  category: string;
+  frequency: Frequency;
+  nextRunDate: string; // "YYYY-MM-DD"
+  active: boolean;
+  createdAt: string;
+}
+
+export interface RecurringTransactionRequest {
+  accountId: number;
+  description: string;
+  amount: number;
+  transactionType: "INCOME" | "EXPENSE";
+  category: string;
+  frequency: Frequency;
+  startDate: string; // "YYYY-MM-DD"
+}
